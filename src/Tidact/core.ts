@@ -32,6 +32,14 @@ type TidactElement<P = TidactElementProps, T extends TidactElementTagName = Tida
   | TidactHostElement<P, T>
   | TextTidactElement
 
+type State = {
+  nextUnitOfWork?: Fiber
+}
+
+type Fiber = {}
+
+const state: State = {}
+
 export const createElement =
   (
     type: HTMLElementTagName,
@@ -61,6 +69,26 @@ const createTextElement =
 
 const isProperty = (key: string) => key !== 'children'
 
+const performUnitOfWork =
+  (fiber: Fiber) => {
+
+    return fiber
+  }
+
+const workLoop: IdleRequestCallback =
+  (deadline) => {
+    let shouldYield = false
+
+    while (state.nextUnitOfWork && !shouldYield) {
+      state.nextUnitOfWork = performUnitOfWork(state.nextUnitOfWork)
+      shouldYield = deadline.timeRemaining() < 1
+    }
+
+    requestIdleCallback(workLoop)
+  }
+
+requestIdleCallback(workLoop)
+
 export const render =
   (element: TidactElement, container: DomNode): void => {
     if (element.type === 'TEXT_ELEMENT') {
@@ -86,3 +114,4 @@ export const render =
 
     container.appendChild(dom)
   }
+
