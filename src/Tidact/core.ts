@@ -14,20 +14,30 @@ type TextTidactElement = {
   props: TextTidactElementProps
 }
 
+type Primitive = string | number | boolean
+type JSXPropsValueType = Primitive | Primitive[] | object | object[]
+
 type TidactElementProps = {
   children: TidactElement[]
-  [key: string]: string | object | object[]
+  [key: string]: JSXPropsValueType
 }
 
+type TidactHostElement<P = TidactElementProps, T extends TidactElementTagName = TidactElementTagName> =
+  {
+    type: T,
+    props: P
+  }
+
 type TidactElement<P = TidactElementProps, T extends TidactElementTagName = TidactElementTagName> =
-  | {
-  type: T,
-  props: P
-}
+  | TidactHostElement<P, T>
   | TextTidactElement
 
 export const createElement =
-  (type: HTMLElementTagName, props: TidactElementProps, ...children: (TidactElement | string)[]): TidactElement =>
+  (
+    type: HTMLElementTagName,
+    props: { [key: string]: JSXPropsValueType },
+    ...children: (TidactElement | string)[]
+  ): TidactElement =>
     ({
       type,
       props: {
@@ -71,9 +81,8 @@ export const render =
       }
     })
 
-    const children = element.props.children as TidactElement[]
+    const children = element.props.children
     children.forEach(child => render(child, dom))
 
     container.appendChild(dom)
-
   }
