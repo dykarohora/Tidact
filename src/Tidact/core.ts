@@ -36,7 +36,15 @@ type State = {
   nextUnitOfWork?: Fiber
 }
 
-type Fiber = {}
+type Fiber =
+  & TidactElement
+  & {
+  // Fiberツリー
+  parent?: Fiber    // 親
+  child?: Fiber     // 子
+  sibling?: Fiber   // 隣の兄弟ノード（兄弟ノードは単方向リンクリスト）
+  dom?: DomNode
+}
 
 const state: State = {}
 
@@ -69,10 +77,84 @@ const createTextElement =
 
 const isProperty = (key: string) => key !== 'children'
 
-const performUnitOfWork =
-  (fiber: Fiber) => {
+const createDom =
+  (fiber: Fiber): DomNode => {
+    if (fiber.type === 'TEXT_ELEMENT') {
+      const text = document.createTextNode(fiber.props.nodeValue)
 
-    return fiber
+      return text
+    }
+
+    const dom = document.createElement(fiber.type)
+
+    Object.keys(fiber.props).filter(isProperty).forEach(name => {
+      const value = fiber.props[name]
+      if (typeof value === 'string') {
+        dom.setAttribute(name, value)
+      } else if (name === 'style') {
+        const style = Object.entries(value).map(kv => `${kv[0]}: ${kv[1]}`).join('; ')
+        dom.setAttribute(name, style)
+      }
+    })
+
+    return dom
+  }
+
+const performUnitOfWork =
+  (fiber: Fiber): Fiber | undefined => {
+    // DOMを生成する
+    if (fiber.dom === undefined) {
+      fiber.dom = createDom(fiber)
+    }
+
+    // 親ノードが存在するならば、親のDOMに自身のDOMをappend
+    if (fiber.parent) {
+      fiber.parent.dom?.appendChild(fiber.dom)
+    }
+
+    // 子Fiberを作っていく（DOMの生成は子Fiberの処理する時に生成する）
+    if (fiber.type !== 'TEXT_ELEMENT') {
+      const elements = fiber.props.children
+      let index = 0
+      let prevSibling: Fiber | undefined = undefined
+
+      while (index < elements.length) {
+        const element = elements[index]
+
+        const newFiber: Fiber = {
+          ...element,
+          parent: fiber,
+        }
+
+        if (index === 0) {
+          // 引数で受け取ったFiberの子供を設定する
+          fiber.child = newFiber
+        } else if (prevSibling) {
+          prevSibling.sibling = newFiber
+        }
+
+        prevSibling = newFiber
+        index++
+      }
+    }
+
+    // 次の作業対象となるFiberを決定する
+    // 次の作業対象が存在しなければundefinedを返してフェーズを終了する
+
+    if (fiber.child) {
+      return fiber.child
+    }
+
+    let nextFiber: Fiber | undefined = fiber
+    while (nextFiber) {
+      if (nextFiber.sibling) {
+        return nextFiber.sibling
+      }
+
+      nextFiber = nextFiber.parent
+    }
+
+    return
   }
 
 const workLoop: IdleRequestCallback =
@@ -91,27 +173,5 @@ requestIdleCallback(workLoop)
 
 export const render =
   (element: TidactElement, container: DomNode): void => {
-    if (element.type === 'TEXT_ELEMENT') {
-      const text = document.createTextNode(element.props.nodeValue)
-      container.appendChild(text)
-
-      return
-    }
-
-    const dom = document.createElement(element.type)
-    Object.keys(element.props).filter(isProperty).forEach(name => {
-      const value = element.props[name]
-      if (typeof value === 'string') {
-        dom.setAttribute(name, value)
-      } else if (name === 'style') {
-        const style = Object.entries(value).map(kv => `${kv[0]}: ${kv[1]}`).join('; ')
-        dom.setAttribute(name, style)
-      }
-    })
-
-    const children = element.props.children
-    children.forEach(child => render(child, dom))
-
-    container.appendChild(dom)
   }
 
