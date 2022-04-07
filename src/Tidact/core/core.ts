@@ -2,32 +2,6 @@ const state: State = {
   deletions: [],
 }
 
-export const createElement =
-  (
-    type: HTMLElementTagName,
-    props: { [key: string]: JSXPropsValueType },
-    ...children: (TidactElement | string)[]
-  ): TidactElement =>
-    ({
-      type,
-      props: {
-        ...props,
-        children: children.map(child =>
-          typeof child === 'string' ?
-            createTextElement(child) :
-            child,
-        ),
-      },
-    })
-
-const createTextElement =
-  (text: string): TextTidactElement =>
-    ({
-      type: 'TEXT_ELEMENT',
-      props: {
-        nodeValue: text,
-      },
-    })
 
 const isProperty = (key: string) => key !== 'children'
 
@@ -88,21 +62,24 @@ const performUnitOfWork =
     }
 
     // 次の作業対象となるFiberを決定する
-    // 次の作業対象が存在しなければundefinedを返してフェーズを終了する
 
+    // 子Fiberが存在すれば、それを次の作業対象にする
     if (fiber.child) {
       return fiber.child
     }
 
     let nextFiber: Fiber | undefined = fiber
     while (nextFiber) {
+      // 兄弟ファイバーが存在すれば、それを次の作業対象にする
       if (nextFiber.sibling) {
         return nextFiber.sibling
       }
 
+      // 兄弟Fiberが存在しない場合は親の兄弟が作業対象にできないか調べる
       nextFiber = nextFiber.parent
     }
 
+    // 次の作業対象が存在しなければundefinedを返してフェーズを終了する
     return
   }
 
@@ -120,6 +97,7 @@ const commitWork = (fiber?: Fiber) => {
 
   const domParent = fiber.parent?.dom
 
+  // Renderフェーズで生成しておいたDOMをappendすることによって画面への描画を行う
   if (domParent && fiber.dom) {
     domParent.appendChild(fiber.dom)
   }
@@ -128,7 +106,7 @@ const commitWork = (fiber?: Fiber) => {
   commitWork(fiber.sibling)
 }
 
-// レンダリング
+// レンダリングループ
 
 const workLoop: IdleRequestCallback =
   (deadline) => {
