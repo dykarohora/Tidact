@@ -34,6 +34,8 @@ type TidactElement<P = TidactElementProps, T extends TidactElementTagName = Tida
 
 type State = {
   nextUnitOfWork?: Fiber
+  wipRoot?: Fiber
+  deletions: Fiber[]
 }
 
 type Fiber =
@@ -46,7 +48,9 @@ type Fiber =
   dom?: DomNode
 }
 
-const state: State = {}
+const state: State = {
+  deletions: [],
+}
 
 export const createElement =
   (
@@ -80,9 +84,7 @@ const isProperty = (key: string) => key !== 'children'
 const createDom =
   (fiber: Fiber): DomNode => {
     if (fiber.type === 'TEXT_ELEMENT') {
-      const text = document.createTextNode(fiber.props.nodeValue)
-
-      return text
+      return document.createTextNode(fiber.props.nodeValue)
     }
 
     const dom = document.createElement(fiber.type)
@@ -100,16 +102,13 @@ const createDom =
     return dom
   }
 
+// Renderフェーズ
+
 const performUnitOfWork =
   (fiber: Fiber): Fiber | undefined => {
     // DOMを生成する
     if (fiber.dom === undefined) {
       fiber.dom = createDom(fiber)
-    }
-
-    // 親ノードが存在するならば、親のDOMに自身のDOMをappend
-    if (fiber.parent) {
-      fiber.parent.dom?.appendChild(fiber.dom)
     }
 
     // 子Fiberを作っていく（DOMの生成は子Fiberの処理する時に生成する）
@@ -157,6 +156,30 @@ const performUnitOfWork =
     return
   }
 
+// Commitフェーズ
+
+const commitRoot = () => {
+  commitWork(state.wipRoot?.child)
+  state.wipRoot = undefined
+}
+
+const commitWork = (fiber?: Fiber) => {
+  if (!fiber) {
+    return
+  }
+
+  const domParent = fiber.parent?.dom
+
+  if (domParent && fiber.dom) {
+    domParent.appendChild(fiber.dom)
+  }
+
+  commitWork(fiber.child)
+  commitWork(fiber.sibling)
+}
+
+// レンダリング
+
 const workLoop: IdleRequestCallback =
   (deadline) => {
     let shouldYield = false
@@ -166,12 +189,25 @@ const workLoop: IdleRequestCallback =
       shouldYield = deadline.timeRemaining() < 1
     }
 
+    if (state.nextUnitOfWork === undefined && state.wipRoot) {
+      commitRoot()
+    }
+
     requestIdleCallback(workLoop)
   }
 
 requestIdleCallback(workLoop)
 
 export const render =
-  (element: TidactElement, container: DomNode): void => {
+  (element: TidactElement, container: HTMLElement): void => {
+    state.wipRoot = {
+      type: container.tagName as HTMLElementTagName,
+      dom: container,
+      props: {
+        children: [element],
+      },
+    }
+
+    state.nextUnitOfWork = state.wipRoot
   }
 
